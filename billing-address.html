@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Billing Address</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f2f4f8; margin: 0; padding: 20px; }
+    form { max-width: 420px; margin: 0 auto; background: #fff; padding: 24px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+    h1 { font-size: 22px; margin-top: 0; }
+    label { display: block; margin-top: 14px; font-weight: bold; font-size: 14px; }
+    input, select { width: 100%; padding: 9px; margin-top: 5px; border: 1px solid #bbb; border-radius: 4px; box-sizing: border-box; font-size: 15px; }
+    input.bad { border-color: #d33; }
+    .error { color: #d33; font-size: 12px; min-height: 14px; }
+    button { margin-top: 20px; width: 100%; padding: 11px; background: #2563eb; color: #fff; border: 0; border-radius: 4px; font-size: 16px; cursor: pointer; }
+    #result { max-width: 420px; margin: 20px auto; background: #e8f7ec; padding: 16px; border-radius: 8px; display: none; white-space: pre-line; }
+  </style>
+</head>
+<body>
+  <form id="addressForm" novalidate>
+    <h1>Billing Address</h1>
+
+    <label for="fullName">Full name</label>
+    <input id="fullName" type="text">
+    <div class="error" id="fullNameError"></div>
+
+    <label for="street">Street address</label>
+    <input id="street" type="text">
+    <div class="error" id="streetError"></div>
+
+    <label for="city">City</label>
+    <input id="city" type="text">
+    <div class="error" id="cityError"></div>
+
+    <label for="state">State</label>
+    <input id="state" type="text">
+    <div class="error" id="stateError"></div>
+
+    <label for="pincode">PIN code (6 digits)</label>
+    <input id="pincode" type="text" maxlength="6" inputmode="numeric">
+    <div class="error" id="pincodeError"></div>
+
+    <label for="phone">Phone number (10 digits)</label>
+    <input id="phone" type="text" maxlength="10" inputmode="numeric">
+    <div class="error" id="phoneError"></div>
+
+    <button type="submit">Save address</button>
+  </form>
+
+  <div id="result"></div>
+
+  <script>
+    // Each rule: field id, test function, and the message to show if it fails.
+    const rules = [
+      { id: "fullName", test: v => v.length >= 2, msg: "Please enter your full name." },
+      { id: "street",   test: v => v.length >= 5, msg: "Please enter your street address." },
+      { id: "city",     test: v => v.length >= 2, msg: "Please enter your city." },
+      { id: "state",    test: v => v.length >= 2, msg: "Please enter your state." },
+      { id: "pincode",  test: v => /^\d{6}$/.test(v), msg: "PIN code must be 6 digits." },
+      { id: "phone",    test: v => /^\d{10}$/.test(v), msg: "Phone number must be 10 digits." }
+    ];
+
+    const form = document.getElementById("addressForm");
+    const result = document.getElementById("result");
+
+    form.addEventListener("submit", function (event) {
+      event.preventDefault(); // stop the page from reloading
+      let allGood = true;
+      const data = {};
+
+      rules.forEach(rule => {
+        const input = document.getElementById(rule.id);
+        const error = document.getElementById(rule.id + "Error");
+        const value = input.value.trim();
+        data[rule.id] = value;
+
+        if (rule.test(value)) {
+          input.classList.remove("bad");
+          error.textContent = "";
+        } else {
+          input.classList.add("bad");
+          error.textContent = rule.msg;
+          allGood = false;
+        }
+      });
+
+      if (!allGood) {
+        result.style.display = "none";
+        return;
+      }
+
+      result.style.display = "block";
+      result.textContent =
+        "Address saved!\n\n" +
+        data.fullName + "\n" +
+        data.street + "\n" +
+        data.city + ", " + data.state + " - " + data.pincode + "\n" +
+        "Phone: " + data.phone;
+    });
+  </script>
+</body>
+</html>
