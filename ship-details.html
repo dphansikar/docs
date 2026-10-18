@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ship Details Finder</title>
+<style>
+  :root { --bg:#f2f6fa; --card:#fff; --ink:#12263a; --muted:#5b6b7b; --accent:#0b5ed7; --line:#dde5ee; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0e1621; --card:#17222f; --ink:#e8eef5; --muted:#9fb0c1; --accent:#5aa2ff; --line:#2a3a4c; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,Arial,sans-serif; background:var(--bg); color:var(--ink); }
+  .wrap { max-width:760px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { margin:0 0 4px; font-size:1.7rem; }
+  p.sub { margin:0 0 20px; color:var(--muted); }
+  form { display:flex; gap:8px; }
+  input { flex:1; padding:12px; font-size:1rem; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); }
+  button { padding:12px 18px; font-size:1rem; border:0; border-radius:8px; background:var(--accent); color:#fff; cursor:pointer; }
+  .hint { margin:10px 0 0; font-size:.9rem; color:var(--muted); }
+  .hint a { color:var(--accent); cursor:pointer; text-decoration:underline; margin-right:8px; }
+  .card { margin-top:20px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; }
+  .card h2 { margin:0; font-size:1.4rem; }
+  .tag { color:var(--muted); margin:2px 0 14px; }
+  dl { display:grid; grid-template-columns:1fr 1fr; gap:10px 16px; margin:0; }
+  dt { font-size:.8rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  dd { margin:2px 0 0; font-size:1.05rem; font-weight:600; }
+  .full { grid-column:1 / -1; }
+  .err { margin-top:20px; padding:14px; border-radius:8px; background:#fdecea; color:#8a1c1c; }
+  .note { margin-top:20px; font-size:.85rem; color:var(--muted); }
+  a.map { color:var(--accent); font-weight:600; }
+  @media (max-width:480px) { dl { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Ship Details Finder</h1>
+  <p class="sub">Type a ship name to see its size, age, flag, tonnage and where it is now.</p>
+
+  <form id="f">
+    <input id="q" placeholder="Example: Ever Given" autocomplete="off" required>
+    <button type="submit">Search</button>
+  </form>
+  <p class="hint">Try: <span id="samples"></span></p>
+
+  <div id="out"></div>
+
+  <p class="note">
+    The ships listed here are sample data so the page works on its own.
+    To get real, live ship data, add your API key in the <code>API_KEY</code> line in this file's script.
+  </p>
+</div>
+
+<script>
+// ---- Settings ----
+// Leave API_KEY empty to use the sample ships below.
+// If you have a key from a ship-data service (for example Datalastic),
+// paste it here and the page will look up real ships.
+const API_KEY = "";
+const API_URL = "https://api.datalastic.com/api/v0/vessel_info";
+
+// ---- Sample data (approximate, for demo) ----
+const SHIPS = [
+  { name:"Ever Given", imo:"9811000", mmsi:"353136000", type:"Container ship", flag:"Panama",
+    length:399.94, breadth:58.8, draught:15.7, built:2018, grossTonnage:220940, deadweight:199629,
+    speed:12.4, lat:30.0, lon:32.57, destination:"Rotterdam", status:"Under way" },
+  { name:"Queen Mary 2", imo:"9241061", mmsi:"310627000", type:"Passenger ship", flag:"Bermuda",
+    length:345.0, breadth:41.0, draught:10.1, built:2003, grossTonnage:149215, deadweight:19189,
+    speed:18.2, lat:50.9, lon:-1.4, destination:"Southampton", status:"Moored" },
+  { name:"Seawise Giant", imo:"7381154", mmsi:"", type:"Oil tanker (scrapped 2010)", flag:"Hong Kong",
+    length:458.45, breadth:68.8, draught:24.6, built:1979, grossTonnage:260941, deadweight:564763,
+    speed:0, lat:null, lon:null, destination:"Not in service", status:"Scrapped" },
+  { name:"Icon of the Seas", imo:"9829930", mmsi:"256288000", type:"Passenger ship", flag:"Malta",
+    length:364.75, breadth:48.0, draught:9.3, built:2023, grossTonnage:250800, deadweight:15000,
+    speed:16.5, lat:25.77, lon:-80.18, destination:"Miami", status:"Under way" }
+];
+
+const out = document.getElementById("out");
+const q = document.getElementById("q");
+
+// Quick-click sample names
+const samples = document.getElementById("samples");
+SHIPS.forEach(s => {
+  const a = document.createElement("a");
+  a.textContent = s.name;
+  a.onclick = () => { q.value = s.name; search(s.name); };
+  samples.appendChild(a);
+});
+
+document.getElementById("f").addEventListener("submit", e => {
+  e.preventDefault();
+  search(q.value);
+});
+
+async function search(name) {
+  name = name.trim();
+  if (!name) return;
+  out.innerHTML = "<p>Searching...</p>";
+  try {
+    const ship = API_KEY ? await fetchLive(name) : findSample(name);
+    out.innerHTML = ship ? render(ship) : `<div class="err">No ship found named "${esc(name)}". Check the spelling and try again.</div>`;
+  } catch (err) {
+    out.innerHTML = `<div class="err">Something went wrong: ${esc(err.message)}</div>`;
+  }
+}
+
+function findSample(name) {
+  const n = name.toLowerCase();
+  return SHIPS.find(s => s.name.toLowerCase() === n) ||
+         SHIPS.find(s => s.name.toLowerCase().includes(n));
+}
+
+// Maps a live API answer to the same shape as the sample ships.
+// Field names follow Datalastic; change them if you use another service.
+async function fetchLive(name) {
+  const r = await fetch(`${API_URL}?api-key=${API_KEY}&name=${encodeURIComponent(name)}`);
+  if (!r.ok) throw new Error("The ship service said: " + r.status);
+  const d = (await r.json()).data;
+  if (!d) return null;
+  return {
+    name:d.name, imo:d.imo, mmsi:d.mmsi, type:d.type_specific || d.type, flag:d.country_name,
+    length:d.length, breadth:d.breadth, draught:d.draught_avg, built:d.year_built,
+    grossTonnage:d.gross_tonnage, deadweight:d.deadweight, speed:d.speed_avg,
+    lat:d.lat ?? null, lon:d.lon ?? null, destination:d.destination || "Unknown", status:d.navigation_status || "Unknown"
+  };
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function num(v, unit) {
+  return v || v === 0 ? Number(v).toLocaleString() + (unit ? " " + unit : "") : "Not available";
+}
+
+function render(s) {
+  const age = s.built ? new Date().getFullYear() - s.built : null;
+  const pos = (s.lat !== null && s.lon !== null)
+    ? `${s.lat.toFixed(3)}°, ${s.lon.toFixed(3)}° — <a class="map" target="_blank" rel="noopener"
+         href="https://www.openstreetmap.org/?mlat=${s.lat}&mlon=${s.lon}#map=7/${s.lat}/${s.lon}">View on map</a>`
+    : "Not available";
+  const row = (k, v, cls) => `<div class="${cls || ""}"><dt>${k}</dt><dd>${v}</dd></div>`;
+  return `
+  <div class="card">
+    <h2>${esc(s.name)}</h2>
+    <p class="tag">${esc(s.type || "Ship")}</p>
+    <dl>
+      ${row("Flag", esc(s.flag || "Not available"))}
+      ${row("IMO number", esc(s.imo || "Not available"))}
+      ${row("MMSI", esc(s.mmsi || "Not available"))}
+      ${row("Year built", s.built || "Not available")}
+      ${row("Age", age !== null ? age + " years" : "Not available")}
+      ${row("Length", num(s.length, "m"))}
+      ${row("Breadth (width)", num(s.breadth, "m"))}
+      ${row("Draught (depth in water)", num(s.draught, "m"))}
+      ${row("Gross tonnage", num(s.grossTonnage, "GT"))}
+      ${row("Deadweight", num(s.deadweight, "t"))}
+      ${row("Speed", num(s.speed, "knots"))}
+      ${row("Status", esc(s.status || "Unknown"))}
+      ${row("Going to", esc(s.destination || "Unknown"))}
+      ${row("Present position", pos, "full")}
+    </dl>
+  </div>`;
+}
+</script>
+</body>
+</html>
